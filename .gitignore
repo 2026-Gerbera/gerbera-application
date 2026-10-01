@@ -1,0 +1,12 @@
+# 개발 PC
+instance/
+.venv/
+__pycache__/
+*.pyc
+
+# 비밀값: 저장소에는 키 이름만(env.example). dev.env는 일부러 둔 개발값이라 커밋한다.
+.env
+.env.*
+*.key
+# RDS CA 번들은 커밋 여부 결정 대기(N24)
+*.pem

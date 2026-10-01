@@ -1,0 +1,33 @@
+# v2에서도 바꾸지 않는다(장부 13). WAS_UPSTREAM 예: 172.30.0.10:8000 / 127.0.0.1:8000
+# 클라우드: ALB가 붙인 X-Forwarded-Proto를 그대로 넘긴다. 없으면(온프렘) 이 연결의 스킴.
+map $http_x_forwarded_proto $ddak_forwarded_proto {
+    default $http_x_forwarded_proto;
+    ""      $scheme;
+}
+
+server {
+    listen 8080;
+    server_tokens off;
+    client_max_body_size 1m;
+
+    location = /nginx-health {
+        access_log off;
+        default_type text/plain;
+        return 200 "ok\n";
+    }
+
+    location /static/ {
+        alias /usr/share/nginx/html/static/;
+    }
+
+    # /health/*, /version, 나머지 전부 WAS로
+    location / {
+        proxy_pass http://${WAS_UPSTREAM};
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $ddak_forwarded_proto;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 30s;
+    }
+}

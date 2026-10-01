@@ -1,0 +1,18 @@
+{# 출처: pallets/flask examples/tutorial @d73fa1c, BSD-3-Clause, Copyright 2010 Pallets. LICENSE.txt, THIRD_PARTY_NOTICES.md 참고. v1용으로 고침 -#}
+<!doctype html>
+<title>{% block title %}{% endblock %} - Flaskr</title>
+<link rel="canonical" href="{{ config['APP_BASE_URL'] }}{{ request.path }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<nav>
+  <h1><a href="{{ url_for('index') }}">Flaskr</a></h1>
+  <ul>{% block nav %}{% endblock %}</ul>
+</nav>
+<section class="content">
+  <header>
+    {% block header %}{% endblock %}
+  </header>
+  {% if error %}
+    <div class="error">{{ error }}</div>
+  {% endif %}
+  {% block content %}{% endblock %}
+</section>

@@ -1,0 +1,11 @@
+# flaskr 배포 설정. 사람이 쓴다(AI가 만들지 않는다). 도메인·호스트·digest·시크릿 값은 넣지 않는다.
+# 형식: O2 DeployConfig(gerbera-on-premise src/ddak/core/contracts/deploy_config.py). 경로는 저장소 루트 기준.
+tiers:
+  web:
+    paths: [nginx, docker/web.Dockerfile, flaskr/static]
+    dockerfile: docker/web.Dockerfile
+  was:
+    paths: [flaskr, migrations, requirements.txt, docker/was.Dockerfile, certs]
+    dockerfile: docker/was.Dockerfile
+migrations_dir: migrations
+env_example: env.example

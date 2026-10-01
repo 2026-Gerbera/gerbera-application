@@ -1,0 +1,6 @@
+# was 이미지 의존성(uv 프로젝트 src/ddak와 별개)
+Flask>=3.1,<3.2
+SQLAlchemy>=2.0,<2.2
+PyMySQL>=1.2.1
+cryptography>=43
+gunicorn>=23,<24

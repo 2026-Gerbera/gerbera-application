@@ -12,6 +12,8 @@
 - 추가형만: CREATE TABLE, CREATE INDEX, ALTER TABLE ... ADD ... 만 허용한다.
 - MySQL DDL은 암묵 커밋이라 중간 실패 시 앞 문장이 남는다. 문장마다 information_schema로
   이미 있는지 확인하고 건너뛰므로 다시 실행해도 안전하다.
+- 버전 행만 믿지 않는다. current는 행과 결과물이 모두 있는 마지막 연속 버전이다. 그래서 행만 있고
+  표가 없으면 precheck(읽기만)가 낮은 current를 내고, 실행기가 up을 돌려 다시 만든다.
 - DB는 롤백하지 않는다. 그래서 v1 코드가 v2 스키마(post.author_id NULL 허용)에서도 돌아야 한다.
 """
 
@@ -85,6 +87,10 @@ _ADD_CONSTRAINT = re.compile(r"^CONSTRAINT\s+`?(\w+)`?", re.IGNORECASE)
 _ADD_INDEX = re.compile(r"^(UNIQUE\s+)?(INDEX|KEY)\s+`?(\w+)`?", re.IGNORECASE)
 _ADD_COLUMN = re.compile(r"^(COLUMN\s+)?`?(\w+)`?\s+", re.IGNORECASE)
 _DESTRUCTIVE = re.compile(r"\b(DROP|RENAME|MODIFY|CHANGE|TRUNCATE)\b", re.IGNORECASE)
+# 이름 없는 ADD(FOREIGN KEY·PRIMARY KEY·UNIQUE (…)·여러 컬럼 괄호)는 있는지 확인할 수 없다
+_ADD_UNNAMED = re.compile(
+    r"^(\(|(FOREIGN|PRIMARY|UNIQUE|FULLTEXT|SPATIAL|CHECK|PARTITION|INDEX|KEY)\b)", re.IGNORECASE
+)
 
 
 def split_statements(sql: str) -> list[str]:
@@ -108,13 +114,23 @@ def split_statements(sql: str) -> list[str]:
 
 
 def lint(statement: str) -> str | None:
-    """추가형이 아니면 이유를 돌려준다."""
+    """추가형이 아니거나 결과물을 확인할 수 없는 문장이면 이유를 돌려준다.
+
+    모든 문장은 already_applied로 결과물(표·인덱스·제약·컬럼)이 있는지 확인할 수 있어야 한다.
+    ALTER TABLE ... ADD는 CONSTRAINT 이름, [UNIQUE] INDEX|KEY 이름, 컬럼만 받는다.
+    """
+    head = statement.split("\n", 1)[0][:80]
     if _CREATE_TABLE.match(statement) or _CREATE_INDEX.match(statement):
         return None
     match = _ALTER_ADD.match(statement)
-    if match and not _DESTRUCTIVE.search(match.group(2)):
-        return None
-    return "추가형이 아닌 문장: " + statement.split("\n", 1)[0][:80]
+    if not match or _DESTRUCTIVE.search(match.group(2)):
+        return "추가형이 아닌 문장: " + head
+    rest = match.group(2).strip()
+    unnamed = _ADD_UNNAMED.match(rest) and not _ADD_INDEX.match(rest)
+    checkable = _ADD_CONSTRAINT.match(rest) or _ADD_INDEX.match(rest) or _ADD_COLUMN.match(rest)
+    if unnamed or not checkable:
+        return "이름 없는 ADD(CONSTRAINT·INDEX 이름 필요): " + head
+    return None
 
 
 def _exists(conn, sql: str, **params) -> bool:
@@ -203,6 +219,38 @@ def applied_rows(conn) -> dict[str, str]:
 
 def drift(files: list[MigrationFile], applied: dict[str, str]) -> list[str]:
     return [f.version for f in files if f.version in applied and applied[f.version] != f.checksum]
+
+
+def missing_objects(conn, files: list[MigrationFile], applied: dict[str, str]) -> list[str]:
+    """기록된 버전인데 결과물(표·인덱스·제약·컬럼)이 DB에 없는 문장. "파일: 첫 줄" 목록."""
+    missing = []
+    for item in files:
+        if item.version not in applied:
+            continue
+        for statement in split_statements(item.path.read_text("utf-8")):
+            if not already_applied(conn, statement):
+                missing.append(f"{item.path.name}: {statement.split(chr(10), 1)[0][:80]}")
+    return missing
+
+
+def effective_version(conn, files: list[MigrationFile], applied: dict[str, str]) -> str | None:
+    """행과 결과물이 모두 있는 마지막 연속 버전(빠진 버전·결과물이 있으면 그 앞에서 멈춘다).
+
+    파일보다 새 버전 행이 있으면(DB는 롤백하지 않으므로 이전 이미지로 돌아온 경우) 예전처럼
+    그 최대 버전을 돌려준다.
+    """
+    newest = max(applied) if applied else None
+    if newest is not None and files and newest > files[-1].version:
+        return newest
+    current = None
+    for item in files:
+        if item.version not in applied:
+            break
+        statements = split_statements(item.path.read_text("utf-8"))
+        if not all(already_applied(conn, s) for s in statements):
+            break
+        current = item.version
+    return current
 
 
 def schema_signature(conn) -> str:
@@ -322,6 +370,10 @@ def run(phase: str) -> dict:
         if drifted:
             _warn("이미 적용된 파일 내용이 바뀜: " + ", ".join(drifted))
             ok = False
+        if phase == "precheck":
+            # 읽기만 한다. 행만 있고 결과물이 없으면 up이 다시 만든다(실패로 치지 않음)
+            for item in missing_objects(conn, files, applied):
+                _warn(f"{item}: 기록은 있으나 DB에 없음(up이 다시 만듦)")
 
         if phase == "up" and ok:
             locked = conn.execute(text("SELECT GET_LOCK(:n, 10)"), {"n": LOCK_NAME}).scalar()
@@ -333,13 +385,20 @@ def run(phase: str) -> dict:
                 if drift(files, applied):
                     raise MigrationError("잠금 뒤 checksum 드리프트")
                 for item in files:
-                    if item.version in applied:
-                        continue
+                    # 기록된 버전도 문장마다 결과물을 확인한다(행만 있고 표가 없는 DB 복구)
+                    recorded = item.version in applied
                     for statement in split_statements(item.path.read_text("utf-8")):
                         if already_applied(conn, statement):
-                            _warn(f"{item.path.name}: 이미 있음, 건너뜀")
+                            if not recorded:
+                                _warn(f"{item.path.name}: 이미 있음, 건너뜀")
                             continue
+                        if recorded:
+                            _warn(f"{item.path.name}: 기록은 있으나 DB에 없어 다시 만듦")
+                            if item.version not in applied_now:
+                                applied_now.append(item.version)
                         conn.execute(text(statement))
+                    if recorded:
+                        continue
                     conn.execute(
                         text(
                             "INSERT INTO schema_migrations (version, name, checksum, release_id)"
@@ -357,11 +416,22 @@ def run(phase: str) -> dict:
             finally:
                 conn.execute(text("SELECT RELEASE_LOCK(:n)"), {"n": LOCK_NAME})
 
-        current = max(applied) if applied else None
+        # 실행기(onprem migrate_db)는 precheck의 current == expected이면 up을 건너뛴다.
+        # 그래서 current는 행만이 아니라 결과물까지 있는 버전으로 계산한다
+        current = effective_version(conn, files, applied)
         if phase in ("up", "verify") and current != expected:
             if phase == "verify" or ok:
                 _warn(f"현재 버전 {current} != 기대 버전 {expected}")
             ok = False
+        if phase in ("up", "verify"):
+            # 최대 버전만 보지 않는다: 모든 파일의 행과 결과물이 실제로 있어야 통과
+            unrecorded = [f.version for f in files if f.version not in applied]
+            if unrecorded:
+                _warn("기록되지 않은 버전: " + ", ".join(unrecorded))
+                ok = False
+            for item in missing_objects(conn, files, applied):
+                _warn(f"{item}: 기록은 있으나 DB에 없음")
+                ok = False
         signature = schema_signature(conn)
     engine.dispose()
     return _result(phase, ok, current, expected, applied_now, signature, fp)

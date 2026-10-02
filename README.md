@@ -1,16 +1,22 @@
 # gerbera-application — 배포 대상 샘플 앱 (flaskr)
 
-SoftBank Hackathon 2026 Term1 팀 Gerbera의 배포 파이프라인([gerbera-on-premise](https://github.com/2026-Gerbera/gerbera-on-premise))이 온프렘과 클라우드에 배포하는 샘플 앱입니다. Flask 공식 튜토리얼 flaskr(BSD-3-Clause)을 바탕으로 만들었습니다. 담당은 장민영(O3)입니다.
+SoftBank Hackathon 2026 Term1 팀 Gerbera의 배포 파이프라인([gerbera-deploy-ai](https://github.com/2026-Gerbera/gerbera-deploy-ai))이 온프렘과 클라우드에 배포하는 샘플 앱입니다. Flask 공식 튜토리얼 flaskr(BSD-3-Clause)을 바탕으로 만들었습니다. 담당은 장민영(O3)입니다.
 
 ## 브랜치
 
 | 브랜치 | 쓰는 쪽 | 뜻 |
 |---|---|---|
-| `dev` | 개발자 | 기준 코드. 개발자는 여기에 push합니다 |
-| `ai-prod` | 파이프라인 | 배포 후보 = `dev` + 승인된 AI 패치. 매번 덮어씁니다. 사람이 push하지 않습니다 |
-| `prod/onprem`, `prod/cloud` | 파이프라인 | 배포와 검증에 성공한 커밋의 기록이자 롤백 기준. 배포를 일으키지 않습니다 |
+| `prod` (기본 브랜치) | 개발자 | 기준 코드. 파이프라인이 이 브랜치를 보고 배포합니다 |
+| `ai-prod` | 파이프라인 | 배포 후보 = `prod` merge + 승인된 AI 패치 커밋(이력 보존). 사람은 커밋하지 않습니다 |
+| `main` | 파이프라인 | 실제로 배포된 코드의 기록. 배포를 일으키지 않습니다 |
 
-- v1(현재 `dev`): 로그인이 없는 익명 게시판입니다. 서명 키와 세션을 쓰지 않습니다.
+| 태그 | 뜻 |
+|---|---|
+| `deployed/onprem`, `deployed/cloud` | 환경별로 배포·검증에 성공한 커밋(롤백 기준). 파이프라인이 옮깁니다 |
+| `v1`, `v2` | 데모 기준 상태. 움직이지 않으므로 같은 데모를 여러 번 반복할 수 있습니다 |
+
+- `prod/...` 같은 이름의 브랜치는 만들지 않습니다(git은 `prod` 브랜치와 `prod/onprem` 브랜치를 함께 둘 수 없습니다).
+- v1(태그 `v1`): 로그인이 없는 익명 게시판입니다. 서명 키와 세션을 쓰지 않습니다.
 - v2(다음 작업): 추가할 기능은 팀에서 협의 중입니다. 아래 "v2 기능 추가 절차"를 따릅니다.
 - `dev.env`와 코드에 있는 개발값(`sqlite:///...`, `localhost` 등)은 데모용으로 일부러 둔 값입니다. 고치지 않습니다. 배포할 때 파이프라인이 대상 환경 값으로 바꿉니다.
 
@@ -63,6 +69,7 @@ docker run --rm --entrypoint python -e DATABASE_URL=... <was 이미지> -m flask
 - stdout에 `MIGRATE_RESULT {"phase","ok","current","expected","applied","signature","fingerprint"}` 한 줄을 씁니다. 진단 메시지는 stderr로 나갑니다.
 - exit code: 0 = 성공, 1 = 실패(결과 줄은 그래도 남김), 2 = 사용법 오류.
 - `precheck`는 `@@require_secure_transport`도 확인합니다. 서버가 TLS를 요구하는데 TLS 연결이 아니면 실패합니다.
+- DB 주소는 `DATABASE_URL_MIGRATOR`가 있으면 그것을, 없으면 `DATABASE_URL`을 씁니다. 온프렘은 권한을 나눠 마이그레이션 계정 주소를 `DATABASE_URL_MIGRATOR`로 넘깁니다. 앱(웹 서버)은 이 키를 읽지 않습니다.
 - 선택 환경변수 `MIGRATE_MODE=bootstrap`을 주면, `precheck`가 DB가 비어 있는지 확인합니다(V18). 표가 남아 있으면 실패합니다. 파이프라인이 이 값을 넘길지는 O1·C2와 정해야 합니다.
 - `up`은 잠금(`GET_LOCK`)을 잡고, checksum 드리프트를 확인하고, 문장 단위로 이미 적용됐는지 확인해 건너뜁니다. 다시 실행해도 안전합니다. DROP·RENAME·MODIFY 같은 파괴형 문장이 있으면 `precheck`부터 실패합니다.
 

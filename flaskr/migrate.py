@@ -2,7 +2,8 @@
 
     python -m flaskr.migrate {precheck|up|verify} [--json]
 
-- 입력: 환경변수 DATABASE_URL(MySQL), 이미지 안 migrations/NNNN_<이름>.sql,
+- 입력: 환경변수 DATABASE_URL_MIGRATOR(있으면 우선, 마이그레이션 전용 계정) 또는 DATABASE_URL(MySQL),
+  이미지 안 migrations/NNNN_<이름>.sql,
   선택 MIGRATE_MODE=bootstrap(precheck에서 DB가 비었는지 확인, V18)
 - precheck는 @@require_secure_transport도 확인한다(ON인데 TLS가 아니면 실패)
 - 출력: stdout 한 줄 `MIGRATE_RESULT {...}` + exit code(0 = ok, 1 = 실패, 2 = 사용법 오류)
@@ -273,9 +274,10 @@ def run(phase: str) -> dict:
     if not files:
         raise MigrationError("migrations/에 파일이 없습니다")
     expected = files[-1].version
-    database_url = os.environ.get("DATABASE_URL", "")
+    # 온프렘은 권한을 나눠 마이그레이션 계정 주소를 DATABASE_URL_MIGRATOR로 넘긴다(앱 런타임에는 없음)
+    database_url = os.environ.get("DATABASE_URL_MIGRATOR") or os.environ.get("DATABASE_URL", "")
     if not database_url:
-        raise MigrationError("DATABASE_URL이 없습니다")
+        raise MigrationError("DATABASE_URL_MIGRATOR와 DATABASE_URL이 모두 없습니다")
     engine = make_engine(database_url)
     if engine.url.get_backend_name() != "mysql":
         raise MigrationError("러너는 MySQL 전용입니다(개발 SQLite는 flask dev-schema)")

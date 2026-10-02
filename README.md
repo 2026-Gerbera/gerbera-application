@@ -29,7 +29,7 @@ SoftBank Hackathon 2026 Term1 팀 Gerbera의 배포 파이프라인([gerbera-dep
 | `docker/was.Dockerfile`, `docker/web.Dockerfile`, `nginx/default.conf.template` | 기준 Dockerfile. 베이스 이미지는 멀티 아키텍처 index digest로 고정했고 비root로 실행합니다. web은 `WAS_UPSTREAM` 템플릿을 쓰며 포트는 8080입니다 |
 | `deploy.yaml` | 파이프라인이 읽는 배포 설정. 저장소 루트에 있어야 합니다 |
 | `dev.env` / `env.example` | 개발 PC 환경 파일(일부러 둔 개발값) / was 환경 키 이름 목록(값 없음) |
-| `certs/` | RDS CA 번들을 둘 자리(`*.pem`은 커밋하지 않음) |
+| `certs/` | RDS CA 번들 `global-bundle.pem`(공개 인증서, 클라우드 DB TLS 검증용). `*.pem` 중 이 파일만 커밋합니다. 출처·SHA256은 `certs/README.md` |
 
 ## 환경 키
 

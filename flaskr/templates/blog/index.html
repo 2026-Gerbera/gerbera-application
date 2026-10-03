@@ -15,6 +15,14 @@
     </svg>
     <p style="margin: 0; font-weight: bold;">v2: image and box added</p>
   </section>
+  {# v3 이미지·박스(자동 감지 배포 시험): v2와 같이 템플릿 안에만 둔다(was만 다시 빌드) #}
+  <section class="release-box" style="display: flex; align-items: center; gap: 1rem; margin: 1rem; padding: 0.75rem 1rem; border: 2px solid #2f855a; border-radius: 8px; background: #f0fff4;">
+    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 64 64" aria-hidden="true">
+      <circle cx="32" cy="32" r="26" fill="#e6f6ec" stroke="#2f855a" stroke-width="3"/>
+      <path d="M20 33l8 8 16-18" fill="none" stroke="#2f855a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <p style="margin: 0; font-weight: bold;">v3: another image and box added</p>
+  </section>
   {% for post in posts %}
     <article class="post">
       <header>

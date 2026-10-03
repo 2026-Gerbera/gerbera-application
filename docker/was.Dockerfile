@@ -16,6 +16,8 @@ COPY migrations/ migrations/
 COPY certs/ certs/
 
 RUN useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin app
+# v3 업로드 로컬 저장소(/app/img). 실행 사용자 10001이 쓴다. VOLUME은 선언하지 않는다
+RUN mkdir /app/img && chown app:app /app/img
 USER 10001
 
 EXPOSE 8000

@@ -33,6 +33,6 @@ def create_app(test_config: dict | None = None) -> Flask:
 
 def _feature_modules() -> list:
     """기능 Blueprint 목록. 새 기능(v2~)은 flaskr/<기능>.py에 bp를 두고 여기에 한 줄 추가한다."""
-    from flaskr import blog, uploads
+    from flaskr import blog
 
-    return [blog, uploads]
+    return [blog]

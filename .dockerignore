@@ -2,6 +2,7 @@ instance/
 .venv/
 __pycache__/
 *.pyc
+img/
 dev.env
 *.env
 .env*

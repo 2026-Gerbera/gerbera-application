@@ -3,6 +3,7 @@ instance/
 .venv/
 __pycache__/
 *.pyc
+/img/
 
 # 비밀값: 저장소에는 키 이름만(env.example). dev.env는 일부러 둔 개발값이라 커밋한다.
 .env
